@@ -6,6 +6,7 @@
 //  Converted to use jpg instead of BMP and other minor changes
 //
 // Modified by Benjamin Jankowski
+// Multiprocessing Lab 11
 ///
 #include <stdlib.h>
 #include <stdio.h>
