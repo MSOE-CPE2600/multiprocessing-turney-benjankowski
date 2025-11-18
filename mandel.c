@@ -4,11 +4,14 @@
 //  https://users.cs.fiu.edu/~cpoellab/teaching/cop4610_fall22/project3.html
 //
 //  Converted to use jpg instead of BMP and other minor changes
-//  
+//
+// Modified by Benjamin Jankowski
 ///
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <math.h>
+#include <sys/wait.h>
 #include "jpegrw.h"
 
 // local routines
@@ -25,7 +28,7 @@ int main( int argc, char *argv[] )
 
 	// These are the default configuration values used
 	// if no command line arguments are given.
-	const char *outfile = "mandel.jpg";
+	const char *outfile = "mandel%d.jpg";
 	double xcenter = 0;
 	double ycenter = 0;
 	double xscale = 4;
@@ -33,11 +36,13 @@ int main( int argc, char *argv[] )
 	int    image_width = 1000;
 	int    image_height = 1000;
 	int    max = 1000;
+	int    process_count = 1;
+	const double scale_factor_modifier = 0.90;
 
 	// For each command line argument given,
 	// override the appropriate configuration value.
 
-	while((c = getopt(argc,argv,"x:y:s:W:H:m:o:h"))!=-1) {
+	while((c = getopt(argc,argv,"x:y:s:W:H:m:o:p:h"))!=-1) {
 		switch(c) 
 		{
 			case 'x':
@@ -61,39 +66,72 @@ int main( int argc, char *argv[] )
 			case 'o':
 				outfile = optarg;
 				break;
+			case 'p':
+				process_count = atoi(optarg);
+				if (process_count < 1 || process_count > 50) {
+					printf("Invalid process count, see help for more information.");
+					exit(1);
+				}
+				break;
 			case 'h':
 				show_help();
 				exit(1);
-				break;
 		}
 	}
 
-	// Calculate y scale based on x scale (settable) and image sizes in X and Y (settable)
-	yscale = xscale / image_width * image_height;
+	const int process_work_count = ceil(50.0 / process_count);
 
-	// Display the configuration of the image.
-	printf("mandel: x=%lf y=%lf xscale=%lf yscale=%1f max=%d outfile=%s\n",xcenter,ycenter,xscale,yscale,max,outfile);
+	for (int n = 0; n < process_count; n++) {
+		if (fork() != 0) {
+			continue; // Make sure main process does not execute any code.
+		}
 
-	// Create a raw image of the appropriate size.
-	imgRawImage* img = initRawImage(image_width,image_height);
+		for (int i = process_work_count * n; i < process_work_count * (n + 1); i++) {
+			if (i > 50) { exit(0); } // Ensure extra images are not created if the process count is even
 
-	// Fill it with a black
-	setImageCOLOR(img,0);
+			// Calculate y scale based on x scale (settable) and image sizes in X and Y (settable)
+			// Will multiply scale by a factor of scale_factor_modifier for every process
+			const double current_x_scale = xscale * pow(scale_factor_modifier, i);
+			yscale = current_x_scale / image_width * image_height;
 
-	// Compute the Mandelbrot image
-	compute_image(img,xcenter-xscale/2,xcenter+xscale/2,ycenter-yscale/2,ycenter+yscale/2,max);
+			const double current_x_center = xcenter - i * 0.04;
 
-	// Save the image in the stated file.
-	storeJpegImageFile(img,outfile);
+			char file_name[100];
+			sprintf(file_name,outfile, i);
 
-	// free the mallocs
-	freeRawImage(img);
+			// Display the configuration of the image.
+			printf("mandel: x=%lf y=%lf xscale=%lf yscale=%1f max=%d outfile=%s\n",
+				current_x_center,ycenter,current_x_scale,yscale,max,file_name);
+
+			// Create a raw image of the appropriate size.
+			imgRawImage* img = initRawImage(image_width,image_height);
+
+			// Fill it with a black
+			setImageCOLOR(img,0);
+
+			// Compute the Mandelbrot image
+			compute_image(img,
+				current_x_center-current_x_scale/2,
+				current_x_center+current_x_scale/2,
+				ycenter-yscale/2,
+				ycenter+yscale/2,max);
+
+			// Save the image in the stated file.
+			storeJpegImageFile(img,file_name);
+
+			// free the mallocs
+			freeRawImage(img);
+		}
+
+		exit(0); // Ensure child exists
+	}
+
+	for (int i = 0; i < process_count; i++) {
+		wait(NULL);
+	}
 
 	return 0;
 }
-
-
-
 
 /*
 Return the number of iterations at point x, y
@@ -152,7 +190,6 @@ void compute_image(imgRawImage* img, double xmin, double xmax, double ymin, doub
 	}
 }
 
-
 /*
 Convert a iteration number to a color.
 Here, we just scale to gray with a maximum of imax.
@@ -163,7 +200,6 @@ int iteration_to_color( int iters, int max )
 	int color = 0xFFFFFF*iters/(double)max;
 	return color;
 }
-
 
 // Show help message
 void show_help()
@@ -176,6 +212,7 @@ void show_help()
 	printf("-s <scale>  Scale of the image in Mandlebrot coordinates (X-axis). (default=4)\n");
 	printf("-W <pixels> Width of the image in pixels. (default=1000)\n");
 	printf("-H <pixels> Height of the image in pixels. (default=1000)\n");
+	printf("-p <count>  Sets the number of processes to make 50 images. (Default 4, must be between 1 and 50\n");
 	printf("-o <file>   Set output file. (default=mandel.bmp)\n");
 	printf("-h          Show this help text.\n");
 	printf("\nSome examples are:\n");
