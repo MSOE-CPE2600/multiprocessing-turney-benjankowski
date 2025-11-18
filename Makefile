@@ -11,11 +11,11 @@ all: $(SOURCES) $(EXECUTABLE)
 -include $(OBJECTS:.o=.d)
 
 $(EXECUTABLE): $(OBJECTS)
-	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
+	$(CC) $(OBJECTS) $(LDFLAGS) -lm -o $@
 
 .c.o: 
 	$(CC) $(CFLAGS) $< -o $@
 	$(CC) -MM $< > $*.d
 
 clean:
-	rm -rf $(OBJECTS) $(EXECUTABLE) *.d
+	rm -rf $(OBJECTS) $(EXECUTABLE) *.d *.jpg
